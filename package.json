@@ -1,6 +1,6 @@
 {
   "name": "@sudobility/entity_pages_rn",
-  "version": "0.0.59",
+  "version": "0.0.60",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
   "scripts": {
