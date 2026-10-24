@@ -28,7 +28,7 @@
       },
       "peerDependencies": {
         "@sudobility/design": "^1.1.66",
-        "@sudobility/entity_client": "^0.0.54",
+        "@sudobility/entity_client": "^0.0.55",
         "@sudobility/types": "^1.9.76",
         "@tanstack/react-query": ">=5",
         "nativewind": ">=4",
@@ -356,7 +356,7 @@
 
     "@sudobility/design": ["@sudobility/design@1.1.66", "https://npm.pkg.github.com/download/@sudobility/design/1.1.66/08ff28eba0e05a9e6916a0aae67ac2c36df590f2", { "peerDependencies": { "clsx": ">=2.0.0", "tailwind-merge": ">=2.0.0" } }, "sha512-E+5HxPKHsujJQMYhtdgtzcGkGtaHhuWpMBd05n+dq/FMihrLT8GeMj6G75XpaxqQmbWYOfkjHEUV2GFcECzeNw=="],
 
-    "@sudobility/entity_client": ["@sudobility/entity_client@0.0.54", "https://npm.pkg.github.com/download/@sudobility/entity_client/0.0.54/5bf017560eb1e05a6e7c7a1bf33bdb6ab410ebc5", { "peerDependencies": { "@sudobility/types": "^1.9.76", "@tanstack/react-query": "^5.0.0", "react": "^18.0.0 || ^19.0.0" } }, "sha512-08WoAdLlxGehKy87OfJXK8uo5f/VOs/vCKKap9szh4lv4UQKu0+mWglrAuvXSPo4v6AAUouctM8VQqYmyvEQVw=="],
+    "@sudobility/entity_client": ["@sudobility/entity_client@0.0.55", "https://npm.pkg.github.com/download/@sudobility/entity_client/0.0.55/aceb85228ec4b6f42f4c4125078c8592cb367220", { "peerDependencies": { "@sudobility/types": "^1.9.76", "@tanstack/react-query": "^5.0.0", "react": "^18.0.0 || ^19.0.0" } }, "sha512-1ZaXuQ1uvKA07EgQdnrzojihDRFpX8Q61jLxyc3vUPr6t8ZnLEWRZM1miJ1MgOm2SvlAQrxwekSuc9cZgxG+Pg=="],
 
     "@sudobility/types": ["@sudobility/types@1.9.76", "https://npm.pkg.github.com/download/@sudobility/types/1.9.76/71635156f72fd9461107d5f147b3dc1c49f863d0", {}, "sha512-b7maZHR5wM84VlQ+l9R+2guzSOrExog6OUNy1oCe7h0abW13syycmnLQL0g+qql0aQ84qTB4A0mJelhY3Vef4Q=="],
 
