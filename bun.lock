@@ -28,7 +28,7 @@
       },
       "peerDependencies": {
         "@sudobility/design": "^1.1.66",
-        "@sudobility/entity_client": "^0.0.56",
+        "@sudobility/entity_client": "^0.0.57",
         "@sudobility/types": "^1.9.76",
         "@tanstack/react-query": ">=5",
         "nativewind": ">=4",
