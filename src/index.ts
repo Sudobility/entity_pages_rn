@@ -1,13 +1,13 @@
 export {
-  TosScreen,
   EntityListPage,
   MembersManagementPage,
   InvitationsPage,
+  ApiKeysPage,
 } from './pages';
 
 export type {
-  TosScreenProps,
   EntityListPageProps,
   MembersManagementPageProps,
   InvitationsPageProps,
+  ApiKeysPageProps,
 } from './pages';
