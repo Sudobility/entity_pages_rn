@@ -1,6 +1,6 @@
 {
   "name": "@sudobility/entity_pages_rn",
-  "version": "0.0.70",
+  "version": "0.0.71",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
   "scripts": {
@@ -17,8 +17,8 @@
     "react-native": ">=0.74",
     "nativewind": ">=4",
     "@tanstack/react-query": ">=5",
-    "@sudobility/building_blocks_rn": "^0.0.106",
-    "@sudobility/design": "^1.1.68",
+    "@sudobility/building_blocks_rn": "^0.0.107",
+    "@sudobility/design": "^1.1.69",
     "@sudobility/entity_client": "^0.0.58",
     "@sudobility/types": "^1.9.78",
     "firebase": "^11.0.0 || ^12.0.0"
@@ -30,7 +30,7 @@
   },
   "devDependencies": {
     "@eslint/js": "~10.0.1",
-    "@sudobility/building_blocks_rn": "^0.0.106",
+    "@sudobility/building_blocks_rn": "^0.0.107",
     "@tanstack/react-query": "~5.104.5",
     "@types/react": "~19.3.0",
     "@typescript-eslint/eslint-plugin": "~8.72.0",
