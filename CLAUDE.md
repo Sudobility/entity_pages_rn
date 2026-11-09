@@ -3,123 +3,114 @@
 > **Git policy — never auto-commit or auto-push.** Leave your work in the working tree.
 > Run `git commit`, `git push`, `gh pr create`, or `scripts/push_all.sh` **only when the user
 > explicitly asks in that turn**. Approval for an earlier change does not carry forward, and
-> finishing a task is not permission to commit it.
+> finishing a task is not permission to commit it. Stay on the current branch — no feature branches.
 
-## Overview
+## What it is
 
-React Native page components for entity/organization management. Provides ready-to-use screens for entity listing, member management, invitations, and terms of service acceptance. Uses `@sudobility/entity_client` hooks for data fetching via TanStack Query.
+React Native **library** (`@sudobility/entity_pages_rn`) of page components for
+entity/organization management: entity listing, member management, invitations,
+API keys, plus a Firebase-auth app shell. Business logic/data fetching lives in
+`@sudobility/entity_client` (TanStack Query hooks); styling is NativeWind. RN
+counterpart of the web package `@sudobility/entity_pages`.
 
-- **Package**: `@sudobility/entity_pages_rn`
-- **Version**: 0.0.3
-- **License**: BUSL-1.1
-- **Module format**: ESM (`"type": "module"`)
-- **Package Manager**: Bun (never npm)
-- **TypeScript**: ^5.5.0, target ES2020, bundler module resolution, strict mode
-- **Build output**: `dist/` (declarations + JS)
+Not an app — no Expo, no native project, nothing to "run". It builds to `dist/`
+and is published to **GitHub Packages**.
 
-## Project Structure
+## Stack
 
-```
-entity_pages_rn/
-├── package.json
-├── tsconfig.json              # Base TS config (strict, declarations, outDir: dist/)
-├── tsconfig.build.json        # Build config (extends base, excludes tests)
-├── nativewind-env.d.ts        # NativeWind type declarations for className props
-└── src/
-    ├── index.ts               # Barrel exports (all pages + prop types)
-    └── pages/
-        ├── index.ts           # Page barrel exports
-        ├── EntityListPage.tsx  # Entity list with create organization form
-        ├── MembersManagementPage.tsx  # Member list, role management, invitations
-        ├── InvitationsPage.tsx # Pending invitations with accept/decline
-        └── TosScreen.tsx      # Terms of service acceptance screen
-```
+- ESM (`"type": "module"`), TypeScript ~6.0, target ES2020, `moduleResolution: bundler`, strict.
+- Package manager **Bun** (never npm). License BUSL-1.1.
+- Build output `dist/` (JS + `.d.ts` + maps).
+- Tests: Vitest (jsdom) — `react-native` is aliased to a mock (`src/__tests__/mocks/react-native.ts`).
 
-## Key Exports
-
-| Export | Type | Description |
-|--------|------|-------------|
-| `EntityListPage` | component | Lists user entities, create organization inline form |
-| `MembersManagementPage` | component | Member list + role changes + invite form + pending invitations |
-| `InvitationsPage` | component | User's pending invitations with accept/decline actions |
-| `TosScreen` | component | Scrollable terms of service with accept/cancel footer |
-| `EntityListPageProps` | interface | Props: `client`, `onSelectEntity?`, `onNavigateToSettings?` |
-| `MembersManagementPageProps` | interface | Props: `client`, `entity`, `currentUserId` |
-| `InvitationsPageProps` | interface | Props: `client`, `onInvitationAccepted?` |
-| `TosScreenProps` | interface | Props: `onAccept`, `onCancel`, `isLoading?` |
-
-## Commands
+## Commands (verified)
 
 ```bash
-bun run build        # Build TypeScript to dist/ (uses tsconfig.build.json)
-bun run typecheck    # TypeScript check (no emit)
+bun run build         # tsc -p tsconfig.build.json + scripts/fix-esm-imports.mjs
+bun run typecheck     # tsc --noEmit
+bun run lint          # eslint, --max-warnings 0
+bun run lint:fix      # eslint --fix
+bun run format        # prettier --write
+bun run format:check  # prettier --check
+bun run test:unit     # vitest run   (NOTE: script is test:unit, not "test")
 ```
 
-## Peer Dependencies
+## Layout
 
-| Package | Version | Purpose |
-|---------|---------|---------|
-| `react` | >=18 | React core |
-| `react-native` | >=0.74 | React Native framework |
-| `nativewind` | >=4 | NativeWind (Tailwind CSS for React Native) |
-| `@tanstack/react-query` | >=5 | Data fetching and caching |
-| `@sudobility/entity_client` | ^0.0.33 | Entity API client and hooks |
-| `@sudobility/types` | ^1.9.61 | Shared type definitions |
+```
+src/
+├── index.ts          # Barrel: pages + app shell + types
+├── pages/
+│   ├── index.ts
+│   ├── EntityListPage.tsx          # entity list + inline create-org form
+│   ├── MembersManagementPage.tsx   # members, role changes, invite, pending invites
+│   ├── InvitationsPage.tsx         # user's pending invitations, accept/decline
+│   └── ApiKeysPage.tsx             # entity API keys: list/create/toggle/revoke
+├── app/
+│   ├── index.ts
+│   └── SudobilityAppWithFirebaseAuthAndEntities.tsx  # Firebase-auth app shell
+└── __tests__/        # vitest specs + RN mock + setup (excluded from build)
+```
 
-## Coding Patterns
+## Exports
 
-- **All pages accept an `EntityClient` instance** -- dependency injection, not context-based.
-- **Uses `@sudobility/entity_client` hooks directly** -- pages call `useEntities`, `useEntityMembers`, `useCreateEntity`, etc.
-- **NativeWind (Tailwind CSS) for styling** -- uses `className` props with Tailwind utility classes. Consuming apps must include this package's source in their `tailwind.config.js` content paths.
-- **Alert.alert for confirmations** -- destructive actions (remove member, decline invitation) use native alerts.
-- **Loading/error/empty states** -- each page handles ActivityIndicator loading, error with retry, and empty list states.
+- Pages: `EntityListPage`, `MembersManagementPage`, `InvitationsPage`, `ApiKeysPage`
+  (+ matching `*Props` types).
+- `SudobilityAppWithFirebaseAuthAndEntities` (+ `...Props`) — app shell extending
+  `SudobilityAppRNWithFirebaseAuthProps` from `@sudobility/building_blocks_rn/firebase`;
+  subscription-agnostic, layer providers via the `AppProviders` slot (inside the entity context).
+- `useCurrentEntity` — re-exported from `@sudobility/entity_client`.
 
-## Related Projects
+> There is no `TosScreen` (removed; older docs referenced it).
 
-- **entity_client** (`@sudobility/entity_client`) -- provides `EntityClient` and all TanStack Query hooks used by these pages.
-- **entity_pages** (`@sudobility/entity_pages`) -- web counterpart of this package.
+## Peer dependencies
 
-## Git Workflow
+`react>=18`, `react-native>=0.74`, `nativewind>=4`, `@tanstack/react-query>=5`,
+`@sudobility/building_blocks_rn ^0.0.116`, `@sudobility/design ^1.1.69`,
+`@sudobility/entity_client ^0.0.58`, `@sudobility/types ^1.9.78`,
+`firebase ^11||^12` (optional — only the app shell needs it).
 
-- Do not use feature branches for code changes. Always stay on the current branch.
+## Conventions
+
+- **Dependency injection, not context:** every page takes an `EntityClient` prop and
+  calls `entity_client` hooks (`useEntities`, `useEntityMembers`, `useCreateEntity`, …).
+- **NativeWind** (`className` + Tailwind utilities). Consuming apps must add this
+  package's source to their `tailwind.config.js` `content` paths.
+- **Native `Alert.alert`** for destructive confirmations (remove member, revoke key, decline).
+- Each page handles loading (`ActivityIndicator`), error (with retry), and empty states.
+
+## Gotchas
+
+- **Build, don't bare-`tsc`.** `scripts/fix-esm-imports.mjs` runs after `tsc` and rewrites
+  relative specifiers to fully-qualified paths (`./core` → `./core/index.js`) so Node's
+  native ESM loader resolves the output. Skipping it ships unresolvable imports.
+- **GitHub Packages auth.** `.npmrc` points `@sudobility` at `https://npm.pkg.github.com`;
+  installs need a `read:packages` token (`GH_PACKAGES_READ_TOKEN`). CI publishes via
+  `.github/workflows/ci-cd.yml` (reusable `johnqh/workflows` `unified-cicd`, `publish-target: github`).
+- Version bumps + `building_blocks_rn` bumps dominate the git history; keep them in sync.
 
 ## Screen rendering — safe area & scroll insets
 
-Honour the device safe area on **every** screen. Always use `useSafeAreaInsets()`
-from `react-native-safe-area-context` (or a `SafeAreaView` with explicit `edges`)
-and pad by the actual inset value. **Never hard-code a padding/margin in place of
-an inset** — a magic number like `paddingBottom: 80` happens to clear today's
-phone and is wrong on the next one.
+Honour the device safe area on **every** screen. Use `useSafeAreaInsets()` from
+`react-native-safe-area-context` (or `SafeAreaView` with explicit `edges`) and pad by the
+actual inset value. **Never hard-code a padding/margin in place of an inset** — a magic
+number like `paddingBottom: 80` clears today's phone and is wrong on the next.
 
 Decide per axis, by whether that axis scrolls:
 
-**Vertical:**
-- **NOT vertically scrollable** (a fixed screen, a pinned footer/CTA, a camera
-  overlay): the content area must stop at the **top and bottom** safe-area insets
-  — pad top by `insets.top`, bottom by `insets.bottom`. It must not reach the
-  physical top/bottom edge (status bar / notch / home indicator).
-- **Vertically scrollable**: let the scroll view render **full-bleed** to the top
-  and bottom edges, and give it top/bottom **scroll insets** equal to the safe
-  area (`contentInset` + `scrollIndicatorInsets`, or
-  `contentInsetAdjustmentBehavior="automatic"`). Content then starts/ends clear of
-  the unsafe regions while still scrolling edge-to-edge behind them.
+- **NOT vertically scrollable** (fixed screen, pinned footer/CTA, camera overlay): content
+  stops at the top and bottom insets — pad top by `insets.top`, bottom by `insets.bottom`.
+  It must not reach the physical edge.
+- **Vertically scrollable**: render full-bleed to top/bottom and give top/bottom scroll
+  insets equal to the safe area (`contentInset` + `scrollIndicatorInsets`, or
+  `contentInsetAdjustmentBehavior="automatic"`).
+- **Horizontal**: not scrollable → pad `insets.left`/`insets.right`; scrollable → render to
+  the edges with left/right scroll insets.
 
-**Horizontal** (landscape, display cutout, rounded corners):
-- **NOT horizontally scrollable**: pad left/right by `insets.left` / `insets.right`.
-- **Horizontally scrollable**: render to the left/right edges and give it
-  left/right scroll insets.
-
-**Bottom CTAs under a tab bar — the trap that burns everyone:** inside a tab
-navigator, the bottom safe-area inset (`insets.bottom`, and what a shared
-`BottomActionBar` reads) **already includes the tab-bar height**. So a pinned
-bottom bar padded by `insets.bottom` already lands above the tab bar. Therefore:
-- DO pad the bottom bar by `insets.bottom` and nothing more.
-- DON'T add the tab-bar height on top of the inset, and DON'T reserve it again on
-  the screen root — that double-counts and floats the CTA too high.
-- DON'T pass a `tabBarHeight` (or similar) that makes the bar swap the inset for a
-  flat fixed gap — that ignores the inset and drops the CTA under the tab bar.
-
-Canonical fixed-screen shape: a flex-column root → the content/scroll region →
-a bottom action bar as the **last child** that pads by `insets.bottom` with no
-manual tab-bar math. Copy a screen already doing this correctly (e.g. a Settings
-screen with a Sign-Out button) rather than re-deriving the padding.
+**Bottom CTAs under a tab bar — the trap:** inside a tab navigator, `insets.bottom` already
+includes the tab-bar height. A pinned bottom bar padded by `insets.bottom` already lands
+above the tab bar. DO pad by `insets.bottom` and nothing more. DON'T add tab-bar height on
+top, DON'T reserve it again on the screen root, DON'T pass a `tabBarHeight` that swaps the
+inset for a flat gap. Canonical fixed-screen shape: flex-column root → content/scroll region
+→ bottom action bar as the last child padding by `insets.bottom`. Copy a screen already doing
+this correctly rather than re-deriving the padding.
