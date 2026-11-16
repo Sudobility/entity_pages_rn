@@ -31,8 +31,7 @@ import {
   EntityClient,
   type EntityApiKey,
 } from '@sudobility/entity_client';
-import { getPermissionsForRole } from '@sudobility/types';
-import type { EntityWithRole } from '@sudobility/types';
+import { getPermissionsForRole, type EntityWithRole } from '@sudobility/types';
 
 const { size, weight } = designTokens.typography;
 
