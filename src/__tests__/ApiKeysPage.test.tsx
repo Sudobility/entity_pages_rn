@@ -66,14 +66,14 @@ describe('ApiKeysPage', () => {
     mockUseRevokeApiKey.mockReturnValue(defaultMutation);
   });
 
-  it('shows a loading indicator', async () => {
+  it('shows skeleton rows while loading', async () => {
     setApiKeys({ isLoading: true });
     const { container } = await render(
       <ApiKeysPage client={mockClient} entity={ownerEntity} />
     );
-    expect(
-      container.querySelector('[data-testid="ActivityIndicator"]')
-    ).not.toBeNull();
+    expect(container.querySelectorAll('[data-testid="Skeleton"]').length).toBe(
+      2
+    );
   });
 
   it('shows an error with a retry that refetches', async () => {
@@ -125,17 +125,19 @@ describe('ApiKeysPage', () => {
       <ApiKeysPage client={mockClient} entity={ownerEntity} />
     );
     expect(queryByText('Key name')).toBeNull();
-    firePress(getByText('+ New Key'));
+    firePress(getByText('New Key'));
     expect(queryByText('Key name')).not.toBeNull();
   });
 
   it('hides management controls from a member', async () => {
     setApiKeys({ data: [activeKey] });
-    const { queryByText } = await render(
+    const { queryByText, container } = await render(
       <ApiKeysPage client={mockClient} entity={memberEntity} />
     );
-    expect(queryByText('+ New Key')).toBeNull();
-    expect(queryByText('Revoke')).toBeNull();
+    expect(queryByText('New Key')).toBeNull();
+    expect(
+      container.querySelector('[accessibilitylabel="Revoke CI deploy"]')
+    ).toBeNull();
     expect(queryByText('Deactivate')).toBeNull();
   });
 
@@ -156,10 +158,14 @@ describe('ApiKeysPage', () => {
 
   it('confirms before revoking a key', async () => {
     setApiKeys({ data: [activeKey] });
-    const { getByText } = await render(
+    const { container } = await render(
       <ApiKeysPage client={mockClient} entity={ownerEntity} />
     );
-    firePress(getByText('Revoke'));
+    firePress(
+      container.querySelector(
+        '[accessibilitylabel="Revoke CI deploy"]'
+      ) as HTMLElement
+    );
     expect(Alert.alert).toHaveBeenCalled();
     expect((Alert.alert as any).mock.calls[0][0]).toBe('Revoke API Key');
   });

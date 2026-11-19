@@ -1,37 +1,62 @@
+/**
+ * @fileoverview Invitations Page (React Native)
+ *
+ * The RN mirror of @sudobility/entity_pages' InvitationsPage: the invitations
+ * the signed-in user has received, each with Accept and Decline. Declining is
+ * confirmed first, with a native alert in place of the web's dialog.
+ *
+ * Renders full-size; the host supplies scroll insets through
+ * `contentContainerStyle`.
+ */
+
 import React from 'react';
 import {
   View,
   Text,
-  FlatList,
-  TouchableOpacity,
-  ActivityIndicator,
+  ScrollView,
   Alert,
+  RefreshControl,
+  type StyleProp,
+  type ViewStyle,
 } from 'react-native';
-import type { EntityClient } from '@sudobility/entity_client';
 import {
   useMyInvitations,
   useAcceptInvitation,
   useDeclineInvitation,
+  type EntityClient,
 } from '@sudobility/entity_client';
-import { designTokens } from '@sudobility/design';
-
-const { size, weight } = designTokens.typography;
+import {
+  EmptyPanel,
+  ErrorPanel,
+  InvitationList,
+  ListSkeleton,
+  PageHeader,
+} from '../components';
 
 export interface InvitationsPageProps {
+  /** Entity API client */
   client: EntityClient;
+  /** Callback when an invitation is accepted */
   onInvitationAccepted?: () => void;
+  /** Style for the scroll content, e.g. the host's safe-area scroll insets */
+  contentContainerStyle?: StyleProp<ViewStyle>;
 }
 
+/**
+ * Page for viewing and responding to pending invitations.
+ */
 export function InvitationsPage({
   client,
   onInvitationAccepted,
+  contentContainerStyle,
 }: InvitationsPageProps) {
   const {
-    data: invitations,
+    data: invitations = [],
     isLoading,
     isError,
     error,
     refetch,
+    isRefetching,
   } = useMyInvitations(client);
   const acceptInvitation = useAcceptInvitation(client);
   const declineInvitation = useDeclineInvitation(client);
@@ -41,136 +66,107 @@ export function InvitationsPage({
       await acceptInvitation.mutateAsync(token);
       onInvitationAccepted?.();
     } catch (err: any) {
-      Alert.alert('Error', err.message || 'Failed to accept invitation');
+      Alert.alert('Error', err?.message || 'Failed to accept invitation');
+    }
+  };
+
+  const handleConfirmDecline = async (token: string) => {
+    try {
+      await declineInvitation.mutateAsync(token);
+    } catch (err: any) {
+      Alert.alert('Error', err?.message || 'Failed to decline invitation');
     }
   };
 
   const handleDecline = (token: string) => {
+    const invitation = invitations.find(inv => inv.token === token);
+    const entityName = invitation?.entity?.displayName || 'this organization';
     Alert.alert(
       'Decline Invitation',
-      'Are you sure you want to decline this invitation?',
+      `Are you sure you want to decline the invitation to join ${entityName}? You will need a new invitation to join later.`,
       [
-        { text: 'Cancel', style: 'cancel' },
+        { text: 'Keep', style: 'cancel' },
         {
           text: 'Decline',
           style: 'destructive',
-          onPress: () => declineInvitation.mutateAsync(token),
+          onPress: () => {
+            void handleConfirmDecline(token);
+          },
         },
       ]
     );
   };
 
-  if (isLoading) {
-    return (
-      <View className='flex-1 justify-center items-center p-6'>
-        <ActivityIndicator size='large' />
-      </View>
-    );
-  }
-
-  if (isError) {
-    return (
-      <View className='flex-1 justify-center items-center p-6'>
-        <Text className={[size.sm, 'text-destructive mb-3'].join(' ')}>
-          {error?.message || 'Failed to load'}
-        </Text>
-        <TouchableOpacity
-          className='px-4 py-2 rounded-md bg-primary'
-          onPress={() => refetch()}
-        >
-          <Text
-            className={['text-primary-foreground', weight.semibold].join(' ')}
-          >
-            Retry
-          </Text>
-        </TouchableOpacity>
-      </View>
-    );
-  }
+  const pendingInvitations = invitations.filter(
+    inv => inv.status === 'pending'
+  );
+  const pendingCount = pendingInvitations.length;
 
   return (
     <View className='flex-1 bg-background'>
-      <View className='flex-row items-center p-4 border-b border-border gap-2'>
-        <Text className={[size.xl, weight.bold, 'text-foreground'].join(' ')}>
-          Invitations
-        </Text>
-        {invitations && invitations.length > 0 && (
-          <View className='bg-primary rounded-[10px] px-2 py-0.5'>
-            <Text
-              className={['text-primary-foreground', size.xs, weight.bold].join(
-                ' '
-              )}
-            >
-              {invitations.length}
-            </Text>
-          </View>
-        )}
-      </View>
-
-      <FlatList
-        data={invitations ?? []}
-        keyExtractor={item => item.id}
-        renderItem={({ item }) => (
-          <View className='flex-row justify-between items-center p-4 border-b border-border'>
-            <View className='flex-1'>
-              <Text
-                className={[size.base, weight.semibold, 'text-foreground'].join(
-                  ' '
-                )}
-              >
-                {item.entity?.displayName ?? 'Organization'}
-              </Text>
-              <Text className='text-[13px] text-muted-foreground mt-0.5 capitalize'>
-                Role: {item.role}
-              </Text>
-            </View>
-            <View className='flex-row gap-2'>
-              <TouchableOpacity
-                className='px-3 py-2 rounded-md border border-border'
-                onPress={() => handleDecline(item.token)}
-                disabled={declineInvitation.isPending}
-              >
-                <Text
-                  className={[
-                    'text-[13px]',
-                    weight.semibold,
-                    'text-muted-foreground',
-                  ].join(' ')}
-                >
-                  Decline
-                </Text>
-              </TouchableOpacity>
-              <TouchableOpacity
-                className={[
-                  'px-3 py-2 rounded-md bg-primary',
-                  acceptInvitation.isPending ? 'opacity-50' : '',
-                ]
-                  .filter(Boolean)
-                  .join(' ')}
-                onPress={() => handleAccept(item.token)}
-                disabled={acceptInvitation.isPending}
-              >
-                <Text
-                  className={[
-                    'text-[13px]',
-                    weight.semibold,
-                    'text-primary-foreground',
-                  ].join(' ')}
-                >
-                  Accept
-                </Text>
-              </TouchableOpacity>
-            </View>
-          </View>
-        )}
-        ListEmptyComponent={
-          <View className='p-10 items-center'>
-            <Text className={[size.sm, 'text-muted-foreground'].join(' ')}>
-              No pending invitations
-            </Text>
-          </View>
+      <PageHeader
+        title='Invitations'
+        subtitle={
+          pendingCount > 0
+            ? `You have ${pendingCount} pending invitation${pendingCount > 1 ? 's' : ''}`
+            : 'No pending invitations'
         }
       />
+
+      <ScrollView
+        className='flex-1'
+        contentContainerStyle={contentContainerStyle}
+        refreshControl={
+          <RefreshControl
+            refreshing={!!isRefetching && !isLoading}
+            onRefresh={() => refetch()}
+          />
+        }
+      >
+        <View className='p-4'>
+          {/* Error State */}
+          {isError && (
+            <ErrorPanel
+              title='Failed to load invitations'
+              message={
+                (error as Error)?.message || 'An unexpected error occurred'
+              }
+              retryLabel='Retry loading invitations'
+              onRetry={() => refetch()}
+            />
+          )}
+
+          {/* Loading State */}
+          {isLoading && (
+            <ListSkeleton rows={2} height={72} label='Loading invitations' />
+          )}
+
+          {/* Content */}
+          {!isLoading &&
+            !isError &&
+            (pendingCount === 0 ? (
+              <EmptyPanel>
+                <Text className='mb-1 text-lg font-medium text-muted-foreground'>
+                  No invitations
+                </Text>
+                <Text className='text-sm text-muted-foreground'>
+                  {"You don't have any pending invitations"}
+                </Text>
+              </EmptyPanel>
+            ) : (
+              <InvitationList
+                invitations={pendingInvitations}
+                mode='user'
+                onAccept={handleAccept}
+                onDecline={handleDecline}
+                disabled={
+                  acceptInvitation.isPending || declineInvitation.isPending
+                }
+                emptyMessage="You don't have any pending invitations"
+              />
+            ))}
+        </View>
+      </ScrollView>
     </View>
   );
 }

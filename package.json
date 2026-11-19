@@ -1,8 +1,18 @@
 {
   "name": "@sudobility/entity_pages_rn",
-  "version": "0.0.93",
+  "version": "0.0.94",
   "main": "dist/index.js",
+  "module": "dist/index.js",
+  "react-native": "src/index.ts",
   "types": "dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "react-native": "./src/index.ts",
+      "import": "./dist/index.js",
+      "require": "./dist/index.js"
+    }
+  },
   "scripts": {
     "build": "bunx tsc -p tsconfig.build.json && node scripts/fix-esm-imports.mjs",
     "typecheck": "bunx tsc --noEmit",
@@ -17,11 +27,13 @@
     "react-native": ">=0.74",
     "nativewind": ">=4",
     "@tanstack/react-query": ">=5",
-    "@sudobility/building_blocks_rn": "^0.0.129",
+    "@sudobility/building_blocks_rn": "^0.0.130",
     "@sudobility/design": "^1.1.72",
     "@sudobility/entity_client": "^0.0.63",
     "@sudobility/types": "^1.11.2",
-    "firebase": "^11.0.0 || ^12.0.0"
+    "firebase": "^11.0.0 || ^12.0.0",
+    "react-native-svg": ">=13.0.0",
+    "@sudobility/components-rn": "^1.0.162"
   },
   "peerDependenciesMeta": {
     "firebase": {
@@ -30,7 +42,8 @@
   },
   "devDependencies": {
     "@eslint/js": "~10.0.1",
-    "@sudobility/building_blocks_rn": "^0.0.129",
+    "@sudobility/building_blocks_rn": "^0.0.130",
+    "@sudobility/components-rn": "^1.0.162",
     "@tanstack/react-query": "~5.104.5",
     "@types/react": "~19.3.0",
     "@typescript-eslint/eslint-plugin": "~8.72.0",
@@ -47,6 +60,7 @@
     "react": "~19.3.1",
     "react-dom": "~19.3.1",
     "react-native": "~0.83.10",
+    "react-native-svg": "~15.16.0",
     "tailwindcss": "~3.4.19",
     "typescript": "~6.0.3",
     "vitest": "~4.1.12"

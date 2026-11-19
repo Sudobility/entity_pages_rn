@@ -28,6 +28,10 @@ export const TouchableOpacity = createMockComponent('TouchableOpacity');
 export const ScrollView = ({
   onPress,
   children,
+  // Scroller-only props: nothing a DOM node understands.
+  refreshControl: _refreshControl,
+  contentContainerStyle: _contentContainerStyle,
+  keyboardShouldPersistTaps: _keyboardShouldPersistTaps,
   ...rest
 }: Record<string, any>) => {
   const domProps: Record<string, any> = {
@@ -37,8 +41,22 @@ export const ScrollView = ({
   if (onPress) domProps.onClick = onPress;
   return React.createElement('div', domProps, children);
 };
+export const RefreshControl = () => null;
 export const ActivityIndicator = createMockComponent('ActivityIndicator');
-export const Pressable = createMockComponent('Pressable');
+export const Pressable = ({
+  onPress,
+  disabled,
+  children,
+  hitSlop: _hitSlop,
+  onAccessibilityTap: _onAccessibilityTap,
+  ...rest
+}: Record<string, any>) => {
+  const domProps: Record<string, any> = { ...rest, 'data-testid': 'Pressable' };
+  // Like the real one: a disabled Pressable does not fire.
+  if (onPress && !disabled) domProps.onClick = onPress;
+  if (disabled) domProps['aria-disabled'] = 'true';
+  return React.createElement('div', domProps, children);
+};
 export const Image = createMockComponent('Image', 'img');
 export const SafeAreaView = createMockComponent('SafeAreaView');
 

@@ -1,189 +1,271 @@
+/**
+ * @fileoverview Entity List Page (React Native)
+ *
+ * The RN mirror of @sudobility/entity_pages' EntityListPage: a "Workspaces"
+ * header with a "New Organization" action, then the personal workspace and the
+ * organizations as cards, with a create-organization dialog.
+ *
+ * Renders full-size; the host supplies scroll insets through
+ * `contentContainerStyle`.
+ */
+
 import React, { useState } from 'react';
 import {
   View,
   Text,
-  FlatList,
-  TouchableOpacity,
-  TextInput,
-  ActivityIndicator,
-  Alert,
+  ScrollView,
+  Pressable,
+  RefreshControl,
+  type StyleProp,
+  type ViewStyle,
 } from 'react-native';
-import type { EntityClient } from '@sudobility/entity_client';
-import { useEntities, useCreateEntity } from '@sudobility/entity_client';
-import { designTokens } from '@sudobility/design';
-
-const { size, weight } = designTokens.typography;
+import {
+  FormModal,
+  Input,
+  TextArea,
+  pressProps,
+} from '@sudobility/components-rn';
+import {
+  useEntities,
+  useCreateEntity,
+  type EntityClient,
+} from '@sudobility/entity_client';
+import type { EntityWithRole } from '@sudobility/types';
+import {
+  EntityList,
+  EmptyPanel,
+  ErrorPanel,
+  HeaderActionButton,
+  ListSkeleton,
+  PageHeader,
+} from '../components';
 
 export interface EntityListPageProps {
+  /** Entity API client */
   client: EntityClient;
-  onSelectEntity?: (entity: any) => void;
+  /** Handler for selecting an entity */
+  onSelectEntity?: (entity: EntityWithRole) => void;
+  /** Handler for navigating to entity settings */
   onNavigateToSettings?: (entitySlug: string) => void;
+  /** Style for the scroll content, e.g. the host's safe-area scroll insets */
+  contentContainerStyle?: StyleProp<ViewStyle>;
 }
 
+const EMPTY_FORM = { displayName: '', description: '' };
+
+/**
+ * Page for listing all user's entities with create functionality.
+ */
 export function EntityListPage({
   client,
   onSelectEntity,
-  onNavigateToSettings: _onNavigateToSettings,
+  contentContainerStyle,
 }: EntityListPageProps) {
+  const [showCreateForm, setShowCreateForm] = useState(false);
+  const [createFormData, setCreateFormData] = useState(EMPTY_FORM);
+  const [createError, setCreateError] = useState<string | null>(null);
+
   const {
-    data: entities,
+    data: entities = [],
     isLoading,
     isError,
     error,
     refetch,
+    isRefetching,
   } = useEntities(client);
   const createEntity = useCreateEntity(client);
-  const [showCreate, setShowCreate] = useState(false);
-  const [newName, setNewName] = useState('');
 
-  const handleCreate = async () => {
-    if (!newName.trim()) return;
+  const personalEntities = entities.filter(e => e.entityType === 'personal');
+  const organizationEntities = entities.filter(
+    e => e.entityType === 'organization'
+  );
+
+  const closeCreateForm = () => {
+    setShowCreateForm(false);
+    setCreateFormData(EMPTY_FORM);
+    setCreateError(null);
+  };
+
+  const handleCreateSubmit = async () => {
+    setCreateError(null);
+
+    if (!createFormData.displayName.trim()) {
+      setCreateError('Display name is required');
+      return;
+    }
+
     try {
-      await createEntity.mutateAsync({ displayName: newName.trim() });
-      setNewName('');
-      setShowCreate(false);
+      await createEntity.mutateAsync({
+        displayName: createFormData.displayName.trim(),
+        description: createFormData.description.trim() || undefined,
+      });
+      closeCreateForm();
     } catch (err: any) {
-      Alert.alert('Error', err.message || 'Failed to create organization');
+      setCreateError(err?.message || 'Failed to create organization');
     }
   };
 
-  if (isLoading) {
-    return (
-      <View className='flex-1 justify-center items-center p-6'>
-        <ActivityIndicator size='large' />
-      </View>
-    );
-  }
-
-  if (isError) {
-    return (
-      <View className='flex-1 justify-center items-center p-6'>
-        <Text className={[size.sm, 'text-destructive mb-3'].join(' ')}>
-          {error?.message || 'Failed to load'}
-        </Text>
-        <TouchableOpacity
-          className='px-4 py-2 rounded-md bg-primary'
-          onPress={() => refetch()}
-        >
-          <Text
-            className={['text-primary-foreground', weight.semibold].join(' ')}
-          >
-            Retry
-          </Text>
-        </TouchableOpacity>
-      </View>
-    );
-  }
-
   return (
     <View className='flex-1 bg-background'>
-      <View className='flex-row justify-between items-center p-4 border-b border-border'>
-        <Text className={[size.xl, weight.bold, 'text-foreground'].join(' ')}>
-          Organizations
-        </Text>
-        <TouchableOpacity
-          className='px-3 py-1.5 rounded-md bg-primary'
-          onPress={() => setShowCreate(!showCreate)}
-        >
-          <Text
-            className={[
-              'text-primary-foreground',
-              weight.semibold,
-              size.sm,
-            ].join(' ')}
-          >
-            + New
-          </Text>
-        </TouchableOpacity>
-      </View>
-
-      {showCreate && (
-        <View className='p-4 border-b border-border bg-muted'>
-          <TextInput
-            className={[
-              'border border-input rounded-lg p-3 bg-background',
-              size.base,
-            ].join(' ')}
-            placeholder='Organization name'
-            value={newName}
-            onChangeText={setNewName}
-            autoFocus
-          />
-          <View className='flex-row justify-end mt-3 gap-2'>
-            <TouchableOpacity
-              className='px-4 py-2 rounded-md'
-              onPress={() => {
-                setShowCreate(false);
-                setNewName('');
-              }}
-            >
-              <Text
-                className={['text-muted-foreground', weight.semibold].join(' ')}
-              >
-                Cancel
-              </Text>
-            </TouchableOpacity>
-            <TouchableOpacity
-              className={[
-                'px-4 py-2 rounded-md bg-primary',
-                createEntity.isPending ? 'opacity-50' : '',
-              ]
-                .filter(Boolean)
-                .join(' ')}
-              onPress={handleCreate}
-              disabled={createEntity.isPending || !newName.trim()}
-            >
-              <Text
-                className={['text-primary-foreground', weight.semibold].join(
-                  ' '
-                )}
-              >
-                {createEntity.isPending ? 'Creating...' : 'Create'}
-              </Text>
-            </TouchableOpacity>
+      {/* Create Form Modal */}
+      <FormModal
+        visible={showCreateForm}
+        title='Create Organization'
+        onClose={closeCreateForm}
+        onSave={handleCreateSubmit}
+        saving={createEntity.isPending}
+        canSave={!createEntity.isPending}
+        saveLabel={createEntity.isPending ? 'Creating...' : 'Create'}
+        size='small'
+      >
+        <View className='gap-4'>
+          <View>
+            <Text className='mb-1 text-sm font-medium text-foreground'>
+              Display Name
+            </Text>
+            <Input
+              value={createFormData.displayName}
+              onChangeText={displayName =>
+                setCreateFormData(prev => ({ ...prev, displayName }))
+              }
+              placeholder='My Organization'
+              error={!!createError}
+              accessibilityLabel='Display Name'
+              autoFocus
+            />
           </View>
-        </View>
-      )}
-
-      <FlatList
-        data={entities ?? []}
-        keyExtractor={item => item.id}
-        renderItem={({ item }) => (
-          <TouchableOpacity
-            className='flex-row justify-between items-center p-4 border-b border-border'
-            onPress={() => onSelectEntity?.(item)}
-          >
-            <View className='flex-1'>
-              <Text
-                className={[size.base, weight.semibold, 'text-foreground'].join(
-                  ' '
-                )}
-              >
-                {item.displayName}
-              </Text>
-              <Text className='text-[13px] text-muted-foreground mt-0.5'>
-                @{item.entitySlug}
-              </Text>
-            </View>
+          <View>
+            <Text className='mb-1 text-sm font-medium text-foreground'>
+              Description (optional)
+            </Text>
+            <TextArea
+              value={createFormData.description}
+              onChangeText={description =>
+                setCreateFormData(prev => ({ ...prev, description }))
+              }
+              placeholder='What is this organization for?'
+              numberOfLines={3}
+              accessibilityLabel='Description (optional)'
+            />
+          </View>
+          {createError ? (
             <Text
-              className={[
-                size.xs,
-                weight.semibold,
-                'text-primary bg-primary/10 px-2 py-1 rounded overflow-hidden capitalize',
-              ].join(' ')}
+              className='text-sm text-destructive'
+              accessibilityRole='alert'
             >
-              {item.userRole}
+              {createError}
             </Text>
-          </TouchableOpacity>
-        )}
-        ListEmptyComponent={
-          <View className='p-10 items-center'>
-            <Text className={[size.sm, 'text-muted-foreground'].join(' ')}>
-              No organizations yet
-            </Text>
-          </View>
+          ) : null}
+        </View>
+      </FormModal>
+
+      <PageHeader
+        title='Workspaces'
+        subtitle='Manage your personal and organization workspaces'
+        action={
+          <HeaderActionButton
+            label='New Organization'
+            accessibilityLabel='Create new organization'
+            onPress={() => setShowCreateForm(true)}
+          />
         }
       />
+
+      <ScrollView
+        className='flex-1'
+        contentContainerStyle={contentContainerStyle}
+        keyboardShouldPersistTaps='handled'
+        refreshControl={
+          <RefreshControl
+            refreshing={!!isRefetching && !isLoading}
+            onRefresh={() => refetch()}
+          />
+        }
+      >
+        <View className='p-4'>
+          {/* Error State */}
+          {isError && (
+            <ErrorPanel
+              title='Failed to load workspaces'
+              message={
+                (error as Error)?.message || 'An unexpected error occurred'
+              }
+              retryLabel='Retry loading workspaces'
+              onRetry={() => refetch()}
+              className='mb-6'
+            />
+          )}
+
+          {/* Loading State */}
+          {isLoading && (
+            <ListSkeleton rows={3} height={72} label='Loading workspaces' />
+          )}
+
+          {/* Content */}
+          {!isLoading && !isError && (
+            <>
+              {/* Personal Workspace */}
+              {personalEntities.length > 0 && (
+                <View className='mb-6'>
+                  <Text
+                    className='mb-3 text-lg font-semibold text-foreground'
+                    accessibilityRole='header'
+                  >
+                    Personal Workspace
+                  </Text>
+                  <EntityList
+                    entities={personalEntities}
+                    onSelect={onSelectEntity}
+                  />
+                </View>
+              )}
+
+              {/* Organizations */}
+              <View>
+                <Text
+                  className='mb-3 text-lg font-semibold text-foreground'
+                  accessibilityRole='header'
+                >
+                  Organizations
+                </Text>
+                {organizationEntities.length === 0 ? (
+                  <EmptyPanel>
+                    <Text className='text-base text-muted-foreground'>
+                      No organizations yet
+                    </Text>
+                    <Pressable
+                      {...pressProps(() => setShowCreateForm(true))}
+                      accessibilityRole='button'
+                      className='mt-2 rounded active:opacity-70'
+                    >
+                      <Text className='text-base text-primary'>
+                        Create your first organization
+                      </Text>
+                    </Pressable>
+                  </EmptyPanel>
+                ) : (
+                  <EntityList
+                    entities={organizationEntities}
+                    onSelect={onSelectEntity}
+                  />
+                )}
+              </View>
+
+              {/* Empty State - No entities at all */}
+              {entities.length === 0 && (
+                <EmptyPanel dashed={false}>
+                  <Text className='mb-2 text-lg font-medium text-muted-foreground'>
+                    No workspaces found
+                  </Text>
+                  <Text className='text-sm text-muted-foreground'>
+                    Create an organization to get started.
+                  </Text>
+                </EmptyPanel>
+              )}
+            </>
+          )}
+        </View>
+      </ScrollView>
     </View>
   );
 }

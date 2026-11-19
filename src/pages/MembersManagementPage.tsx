@@ -1,14 +1,29 @@
+/**
+ * @fileoverview Members Management Page (React Native)
+ *
+ * The RN mirror of @sudobility/entity_pages' MembersManagementPage: the
+ * members list under a header carrying the title and an "Invite" button, which
+ * opens an "Invite Member" panel under the header without leaving the page.
+ *
+ * One addition to the web page: an owner also sees the invitations still
+ * pending for this entity, and can cancel them — there is nowhere else in an
+ * RN app to do that. Destructive actions are confirmed with a native alert in
+ * place of the web's dialog.
+ *
+ * Renders full-size; the host supplies scroll insets through
+ * `contentContainerStyle`.
+ */
+
 import React, { useState } from 'react';
 import {
   View,
   Text,
-  FlatList,
-  TouchableOpacity,
-  TextInput,
-  ActivityIndicator,
+  ScrollView,
   Alert,
+  RefreshControl,
+  type StyleProp,
+  type ViewStyle,
 } from 'react-native';
-import type { EntityClient } from '@sudobility/entity_client';
 import {
   useEntityMembers,
   useUpdateMemberRole,
@@ -16,342 +31,279 @@ import {
   useEntityInvitations,
   useCreateInvitation,
   useCancelInvitation,
+  type EntityClient,
 } from '@sudobility/entity_client';
-import { EntityRole } from '@sudobility/types';
-import { designTokens } from '@sudobility/design';
-
-const { size, weight } = designTokens.typography;
+import type {
+  EntityRole,
+  EntityWithRole,
+  InviteMemberRequest,
+} from '@sudobility/types';
+import {
+  EmptyPanel,
+  ErrorPanel,
+  HeaderActionButton,
+  InvitationForm,
+  InvitationList,
+  ListSkeleton,
+  MemberList,
+  PageHeader,
+} from '../components';
 
 export interface MembersManagementPageProps {
+  /** Entity API client */
   client: EntityClient;
-  entity: {
-    id: string;
-    entitySlug: string;
-    displayName: string;
-    userRole: string;
+  /**
+   * Entity to manage. A navigator that carries only the fields it needs may
+   * pass that subset; with no `entityType` the entity is treated as an
+   * organization.
+   */
+  entity: Pick<EntityWithRole, 'id' | 'entitySlug' | 'displayName'> & {
+    userRole: EntityRole | string;
+    entityType?: EntityWithRole['entityType'] | string;
   };
+  /** Current user's ID */
   currentUserId: string;
+  /** Style for the scroll content, e.g. the host's safe-area scroll insets */
+  contentContainerStyle?: StyleProp<ViewStyle>;
 }
 
+/**
+ * Page for managing an entity's members.
+ */
 export function MembersManagementPage({
   client,
   entity,
-  currentUserId: _currentUserId,
+  currentUserId,
+  contentContainerStyle,
 }: MembersManagementPageProps) {
-  const { data: members, isLoading: membersLoading } = useEntityMembers(
-    client,
-    entity.entitySlug
-  );
-  const { data: invitations, isLoading: invitationsLoading } =
-    useEntityInvitations(client, entity.entitySlug);
+  const canManage = entity.userRole === 'owner';
+  const isPersonal = entity.entityType === 'personal';
+
+  /** Whether the "Invite Member" panel under the header is expanded. */
+  const [inviteOpen, setInviteOpen] = useState(false);
+
+  // Members
+  const {
+    data: members = [],
+    isLoading: membersLoading,
+    isError: membersError,
+    error: membersErrorObj,
+    refetch: refetchMembers,
+    isRefetching: membersRefetching,
+  } = useEntityMembers(client, entity.entitySlug);
   const updateRole = useUpdateMemberRole(client);
   const removeMember = useRemoveMember(client);
+
+  // Invitations sent for this entity
+  const { data: invitations = [], refetch: refetchInvitations } =
+    useEntityInvitations(client, entity.entitySlug);
   const createInvitation = useCreateInvitation(client);
   const cancelInvitation = useCancelInvitation(client);
 
-  const [showInvite, setShowInvite] = useState(false);
-  const [inviteEmail, setInviteEmail] = useState('');
-  const [inviteRole, setInviteRole] = useState<EntityRole>(EntityRole.MEMBER);
+  const pendingInvitations = invitations.filter(
+    inv => inv.status === 'pending'
+  );
 
-  const canManage =
-    entity.userRole === EntityRole.OWNER || entity.userRole === 'owner';
-  const isLoading = membersLoading || invitationsLoading;
-
-  const handleRemoveMember = (memberId: string, name: string) => {
-    Alert.alert('Remove Member', `Remove ${name} from ${entity.displayName}?`, [
-      { text: 'Cancel', style: 'cancel' },
-      {
-        text: 'Remove',
-        style: 'destructive',
-        onPress: () =>
-          removeMember.mutateAsync({ entitySlug: entity.entitySlug, memberId }),
-      },
-    ]);
-  };
-
-  const handleRoleChange = (memberId: string, newRole: EntityRole) => {
-    updateRole.mutateAsync({
-      entitySlug: entity.entitySlug,
-      memberId,
-      role: newRole,
-    });
-  };
-
-  const handleInvite = async () => {
-    if (!inviteEmail.trim()) return;
+  const handleRoleChange = async (userId: string, role: EntityRole) => {
     try {
-      await createInvitation.mutateAsync({
+      await updateRole.mutateAsync({
         entitySlug: entity.entitySlug,
-        request: { email: inviteEmail.trim(), role: inviteRole },
+        memberId: userId,
+        role,
       });
-      setInviteEmail('');
-      setShowInvite(false);
     } catch (err: any) {
-      Alert.alert('Error', err.message || 'Failed to send invitation');
+      Alert.alert('Error', err?.message || 'Failed to update role');
+    }
+  };
+
+  const handleConfirmRemove = async (userId: string) => {
+    try {
+      await removeMember.mutateAsync({
+        entitySlug: entity.entitySlug,
+        memberId: userId,
+      });
+    } catch (err: any) {
+      Alert.alert('Error', err?.message || 'Failed to remove member');
+    }
+  };
+
+  const handleRemoveMember = (userId: string) => {
+    const member = members.find(m => m.userId === userId);
+    const label =
+      member?.user?.displayName || member?.user?.email || 'this member';
+    Alert.alert(
+      'Remove Member',
+      `Are you sure you want to remove ${label}? They will lose access to this organization.`,
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Remove',
+          style: 'destructive',
+          onPress: () => {
+            void handleConfirmRemove(userId);
+          },
+        },
+      ]
+    );
+  };
+
+  const handleInvite = async (request: InviteMemberRequest) => {
+    await createInvitation.mutateAsync({
+      entitySlug: entity.entitySlug,
+      request,
+    });
+    // Collapse the panel only after a successful invite; on error the form
+    // stays open so the user can correct and retry.
+    setInviteOpen(false);
+  };
+
+  const handleConfirmCancelInvitation = async (invitationId: string) => {
+    try {
+      await cancelInvitation.mutateAsync({
+        entitySlug: entity.entitySlug,
+        invitationId,
+      });
+    } catch (err: any) {
+      Alert.alert('Error', err?.message || 'Failed to cancel invitation');
     }
   };
 
   const handleCancelInvitation = (invitationId: string) => {
-    Alert.alert('Cancel Invitation', 'Cancel this invitation?', [
-      { text: 'No', style: 'cancel' },
-      {
-        text: 'Yes',
-        style: 'destructive',
-        onPress: () =>
-          cancelInvitation.mutateAsync({
-            entitySlug: entity.entitySlug,
-            invitationId,
-          }),
-      },
-    ]);
+    const invitation = invitations.find(inv => inv.id === invitationId);
+    Alert.alert(
+      'Cancel Invitation',
+      `Cancel the invitation to ${invitation?.email || 'this person'}? They will need a new invitation to join.`,
+      [
+        { text: 'Keep', style: 'cancel' },
+        {
+          text: 'Cancel Invitation',
+          style: 'destructive',
+          onPress: () => {
+            void handleConfirmCancelInvitation(invitationId);
+          },
+        },
+      ]
+    );
   };
 
-  if (isLoading) {
+  // Personal entities don't have members to manage.
+  if (isPersonal) {
     return (
-      <View className='flex-1 justify-center items-center'>
-        <ActivityIndicator size='large' />
+      <View className='flex-1 bg-background'>
+        <PageHeader title='Members' />
+        <ScrollView
+          className='flex-1'
+          contentContainerStyle={contentContainerStyle}
+        >
+          <View className='items-center px-4 py-12'>
+            <Text className='text-center text-base text-muted-foreground'>
+              Personal workspaces cannot have additional members.
+            </Text>
+            <Text className='mt-2 text-center text-base text-muted-foreground'>
+              Create an organization to collaborate with others.
+            </Text>
+          </View>
+        </ScrollView>
       </View>
     );
   }
 
   return (
     <View className='flex-1 bg-background'>
-      {/* Members Section */}
-      <View className='flex-row justify-between items-center p-4 border-b border-border'>
-        <Text className={[size.lg, weight.bold, 'text-foreground'].join(' ')}>
-          Members
-        </Text>
-        {canManage && (
-          <TouchableOpacity
-            className='px-3 py-1.5 rounded-md bg-primary'
-            onPress={() => setShowInvite(!showInvite)}
-          >
-            <Text
-              className={[
-                'text-primary-foreground',
-                weight.semibold,
-                size.sm,
-              ].join(' ')}
-            >
-              Invite
+      <PageHeader
+        title='Members'
+        subtitle={`${members.length} member${members.length === 1 ? '' : 's'} in ${entity.displayName}`}
+        action={
+          canManage ? (
+            <HeaderActionButton
+              label='Invite'
+              onPress={() => setInviteOpen(open => !open)}
+              expanded={inviteOpen}
+            />
+          ) : undefined
+        }
+      >
+        {/* Invite Member panel (extends the header) */}
+        {canManage && inviteOpen ? (
+          <View className='border-t border-border px-4 py-3'>
+            <Text className='mb-3 text-sm font-semibold text-foreground'>
+              Invite Member
             </Text>
-          </TouchableOpacity>
-        )}
-      </View>
+            <InvitationForm
+              onSubmit={handleInvite}
+              isSubmitting={createInvitation.isPending}
+            />
+          </View>
+        ) : null}
+      </PageHeader>
 
-      {showInvite && (
-        <View className='p-4 border-b border-border bg-muted'>
-          <TextInput
-            className={[
-              'border border-input rounded-lg p-3 bg-background',
-              size.base,
-            ].join(' ')}
-            placeholder='Email address'
-            value={inviteEmail}
-            onChangeText={setInviteEmail}
-            keyboardType='email-address'
-            autoCapitalize='none'
-            autoFocus
+      <ScrollView
+        className='flex-1'
+        contentContainerStyle={contentContainerStyle}
+        keyboardShouldPersistTaps='handled'
+        refreshControl={
+          <RefreshControl
+            refreshing={!!membersRefetching && !membersLoading}
+            onRefresh={() => {
+              refetchMembers();
+              refetchInvitations?.();
+            }}
           />
-          <View className='flex-row mt-3 gap-2'>
-            <TouchableOpacity
-              className={[
-                'px-4 py-2 rounded-md border',
-                inviteRole === EntityRole.MEMBER
-                  ? 'border-primary bg-primary/10'
-                  : 'border-input',
-              ].join(' ')}
-              onPress={() => setInviteRole(EntityRole.MEMBER)}
-            >
-              <Text
-                className={[
-                  weight.semibold,
-                  inviteRole === EntityRole.MEMBER
-                    ? 'text-primary'
-                    : 'text-muted-foreground',
-                ].join(' ')}
-              >
-                Member
-              </Text>
-            </TouchableOpacity>
-            <TouchableOpacity
-              className={[
-                'px-4 py-2 rounded-md border',
-                inviteRole === EntityRole.MANAGER
-                  ? 'border-primary bg-primary/10'
-                  : 'border-input',
-              ].join(' ')}
-              onPress={() => setInviteRole(EntityRole.MANAGER)}
-            >
-              <Text
-                className={[
-                  weight.semibold,
-                  inviteRole === EntityRole.MANAGER
-                    ? 'text-primary'
-                    : 'text-muted-foreground',
-                ].join(' ')}
-              >
-                Manager
-              </Text>
-            </TouchableOpacity>
-          </View>
-          <View className='flex-row justify-end mt-3 gap-3 items-center'>
-            <TouchableOpacity
-              onPress={() => {
-                setShowInvite(false);
-                setInviteEmail('');
-              }}
-            >
-              <Text
-                className={['text-muted-foreground', weight.semibold].join(' ')}
-              >
-                Cancel
-              </Text>
-            </TouchableOpacity>
-            <TouchableOpacity
-              className={[
-                'px-4 py-2 rounded-md bg-primary',
-                !inviteEmail.trim() || createInvitation.isPending
-                  ? 'opacity-50'
-                  : '',
-              ]
-                .filter(Boolean)
-                .join(' ')}
-              onPress={handleInvite}
-              disabled={!inviteEmail.trim() || createInvitation.isPending}
-            >
-              <Text
-                className={['text-primary-foreground', weight.semibold].join(
-                  ' '
-                )}
-              >
-                {createInvitation.isPending ? 'Sending...' : 'Send Invite'}
-              </Text>
-            </TouchableOpacity>
-          </View>
-        </View>
-      )}
-
-      <FlatList
-        data={members ?? []}
-        keyExtractor={item => item.id}
-        renderItem={({ item }) => (
-          <View className='flex-row justify-between items-center p-4 border-b border-border'>
-            <View className='flex-1'>
-              <Text
-                className={[
-                  'text-[15px]',
-                  weight.semibold,
-                  'text-foreground',
-                ].join(' ')}
-              >
-                {item.userId}
-              </Text>
-              <Text className='text-[13px] text-muted-foreground mt-0.5 capitalize'>
-                {item.role}
-              </Text>
-            </View>
-            {canManage && item.role !== EntityRole.OWNER && (
-              <View className='flex-row gap-2'>
-                <TouchableOpacity
-                  className='px-2.5 py-1.5 rounded border border-border'
-                  onPress={() =>
-                    handleRoleChange(
-                      item.id,
-                      item.role === EntityRole.MANAGER
-                        ? EntityRole.MEMBER
-                        : EntityRole.MANAGER
-                    )
-                  }
-                >
-                  <Text
-                    className={[
-                      size.xs,
-                      weight.semibold,
-                      'text-foreground',
-                    ].join(' ')}
-                  >
-                    {item.role === EntityRole.MANAGER ? 'Demote' : 'Promote'}
-                  </Text>
-                </TouchableOpacity>
-                <TouchableOpacity
-                  className='px-2.5 py-1.5 rounded border border-destructive'
-                  onPress={() => handleRemoveMember(item.id, item.userId)}
-                >
-                  <Text
-                    className={[
-                      size.xs,
-                      weight.semibold,
-                      'text-destructive',
-                    ].join(' ')}
-                  >
-                    Remove
-                  </Text>
-                </TouchableOpacity>
-              </View>
-            )}
-          </View>
-        )}
-        ListEmptyComponent={
-          <View className='p-10 items-center'>
-            <Text className={[size.sm, 'text-muted-foreground'].join(' ')}>
-              No members
-            </Text>
-          </View>
         }
-        ListFooterComponent={
-          invitations && invitations.length > 0 ? (
-            <View>
-              <View className='flex-row justify-between items-center p-4 border-b border-border'>
-                <Text
-                  className={[size.lg, weight.bold, 'text-foreground'].join(
-                    ' '
-                  )}
-                >
-                  Pending Invitations
+      >
+        <View className='p-4'>
+          {membersError ? (
+            <ErrorPanel
+              title='Failed to load members'
+              message={
+                (membersErrorObj as Error)?.message ||
+                'An unexpected error occurred'
+              }
+              retryLabel='Retry loading members'
+              onRetry={() => refetchMembers()}
+            />
+          ) : membersLoading ? (
+            <ListSkeleton rows={3} height={64} label='Loading members' />
+          ) : members.length === 0 ? (
+            <EmptyPanel>
+              <Text className='text-base text-muted-foreground'>
+                No members yet
+              </Text>
+              {canManage && (
+                <Text className='mt-1 text-sm text-muted-foreground'>
+                  Use the Invite button to add members.
                 </Text>
-              </View>
-              {invitations.map((inv: any) => (
-                <View
-                  key={inv.id}
-                  className='flex-row justify-between items-center p-4 border-b border-border'
-                >
-                  <View className='flex-1'>
-                    <Text
-                      className={[
-                        'text-[15px]',
-                        weight.semibold,
-                        'text-foreground',
-                      ].join(' ')}
-                    >
-                      {inv.email}
-                    </Text>
-                    <Text className='text-[13px] text-warning mt-0.5'>
-                      Pending - {inv.role}
-                    </Text>
-                  </View>
-                  {canManage && (
-                    <TouchableOpacity
-                      className='px-2.5 py-1.5 rounded border border-destructive'
-                      onPress={() => handleCancelInvitation(inv.id)}
-                    >
-                      <Text
-                        className={[
-                          size.xs,
-                          weight.semibold,
-                          'text-destructive',
-                        ].join(' ')}
-                      >
-                        Cancel
-                      </Text>
-                    </TouchableOpacity>
-                  )}
-                </View>
-              ))}
+              )}
+            </EmptyPanel>
+          ) : (
+            <MemberList
+              members={members}
+              currentUserId={currentUserId}
+              canManage={canManage}
+              onRoleChange={handleRoleChange}
+              onRemove={handleRemoveMember}
+            />
+          )}
+
+          {/* Invitations sent and not yet answered */}
+          {canManage && pendingInvitations.length > 0 ? (
+            <View className='mt-6'>
+              <Text
+                className='mb-3 text-lg font-semibold text-foreground'
+                accessibilityRole='header'
+              >
+                Pending Invitations
+              </Text>
+              <InvitationList
+                invitations={pendingInvitations}
+                mode='admin'
+                onCancel={handleCancelInvitation}
+                disabled={cancelInvitation.isPending}
+              />
             </View>
-          ) : null
-        }
-      />
+          ) : null}
+        </View>
+      </ScrollView>
     </View>
   );
 }

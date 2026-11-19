@@ -171,3 +171,22 @@ export async function flushPromises(): Promise<void> {
     await new Promise(resolve => setTimeout(resolve, 0));
   });
 }
+
+/**
+ * Types into a controlled text field: sets the value the way a browser would,
+ * so React's `onChange` fires.
+ */
+export function changeText(
+  element: HTMLInputElement | HTMLTextAreaElement,
+  value: string
+): void {
+  const proto =
+    element instanceof HTMLTextAreaElement
+      ? HTMLTextAreaElement.prototype
+      : HTMLInputElement.prototype;
+  const setter = Object.getOwnPropertyDescriptor(proto, 'value')?.set;
+  reactAct(() => {
+    setter?.call(element, value);
+    element.dispatchEvent(new Event('input', { bubbles: true }));
+  });
+}

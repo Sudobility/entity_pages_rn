@@ -42,10 +42,15 @@ src/
 ├── index.ts          # Barrel: pages + app shell + types
 ├── pages/
 │   ├── index.ts
-│   ├── EntityListPage.tsx          # entity list + inline create-org form
-│   ├── MembersManagementPage.tsx   # members, role changes, invite, pending invites
+│   ├── EntityListPage.tsx          # "Workspaces": personal + organizations, create-org dialog
+│   ├── MembersManagementPage.tsx   # members, role changes, invite panel, pending invites
 │   ├── InvitationsPage.tsx         # user's pending invitations, accept/decline
 │   └── ApiKeysPage.tsx             # entity API keys: list/create/toggle/revoke
+├── components/       # RN counterparts of the web's `@sudobility/components/entity`
+│   ├── EntityCard / EntityList / MemberList / MemberRoleSelector
+│   ├── InvitationForm / InvitationList / RoleBadge
+│   ├── PageHeader / HeaderActionButton / states (skeleton, error, empty)
+│   └── icons.tsx + svg-interop.ts  # the web's Heroicons, drawn with react-native-svg
 ├── app/
 │   ├── index.ts
 │   └── SudobilityAppWithFirebaseAuthAndEntities.tsx  # Firebase-auth app shell
@@ -65,19 +70,46 @@ src/
 
 ## Peer dependencies
 
-`react>=18`, `react-native>=0.74`, `nativewind>=4`, `@tanstack/react-query>=5`,
-`@sudobility/building_blocks_rn ^0.0.116`, `@sudobility/design ^1.1.69`,
-`@sudobility/entity_client ^0.0.58`, `@sudobility/types ^1.9.78`,
-`firebase ^11||^12` (optional — only the app shell needs it).
+`react>=18`, `react-native>=0.74`, `nativewind>=4`, `react-native-svg>=13`,
+`@tanstack/react-query>=5`, `@sudobility/components-rn`, `@sudobility/building_blocks_rn`,
+`@sudobility/design`, `@sudobility/entity_client`, `@sudobility/types`,
+`firebase ^11||^12` (optional — only the app shell needs it). See `package.json` for ranges.
+
+## How an app consumes it (read this before touching packaging)
+
+Metro reads the package from **`src/`**, not `dist/`: `package.json` has
+`"react-native": "src/index.ts"` and the matching `exports` condition, like the sibling
+`*_pages_rn` packages. That is what makes `className` work — NativeWind styles JSX only when
+the **app's** babel preset compiles it. Precompiled `dist/` calls `react/jsx-runtime` directly,
+so every `className` is ignored and a page renders as unstyled lines of text. `dist/` is for
+types and non-RN bundlers only. The app must also list
+`./node_modules/@sudobility/entity_pages_rn/{src,dist}/**/*.{js,jsx,ts,tsx}` in its
+`tailwind.config.js` `content`, or the classes are never generated.
 
 ## Conventions
 
 - **Dependency injection, not context:** every page takes an `EntityClient` prop and
   calls `entity_client` hooks (`useEntities`, `useEntityMembers`, `useCreateEntity`, …).
-- **NativeWind** (`className` + Tailwind utilities). Consuming apps must add this
-  package's source to their `tailwind.config.js` `content` paths.
-- **Native `Alert.alert`** for destructive confirmations (remove member, revoke key, decline).
-- Each page handles loading (`ActivityIndicator`), error (with retry), and empty states.
+- **Mirror the web.** Each page follows `@sudobility/entity_pages`' page of the same name —
+  same header, sections, wording and states — and is built from `src/components/`, which
+  mirror the web's `@sudobility/components/entity` and are typed against `@sudobility/types`.
+  Change the web page and this one together.
+- **`src/components/` is a stopgap copy.** The published `@sudobility/components-rn/entity`
+  (≤ 1.0.161) has a different data model (other roles, no accept/decline), so the pages
+  could not use it. The same components now live in components-rn's `src/entity` with the
+  web's API; once a components-rn release carrying them is published, replace
+  `EntityCard`/`EntityList`/`MemberList`/`MemberRoleSelector`/`InvitationForm`/
+  `InvitationList`/`RoleBadge`/`icons` here with imports from
+  `@sudobility/components-rn/entity` and raise the peer range. Until then keep the two in step.
+- **NativeWind** (`className` + Tailwind utilities); primitives (`FormModal`, `Modal`, `Input`,
+  `TextArea`, `Skeleton`, `cn`, `pressProps`) come from `@sudobility/components-rn`.
+- **Native `Alert.alert`** for destructive confirmations (remove member, revoke key, decline),
+  in place of the web's confirmation dialogs; same titles and messages.
+- Each page is header + `ScrollView`. It takes `contentContainerStyle` so the host can supply
+  safe-area scroll insets; the page pads its own content.
+- Each page handles loading (skeleton rows), error (panel with retry), and empty states.
+- Member mutations take the member's **user id** (`member.userId`) as `memberId`, as the web
+  does — the API keys members by user, not by membership row.
 
 ## Gotchas
 

@@ -18,6 +18,10 @@ export default defineConfig({
         __dirname,
         'src/__tests__/mocks/react-native.ts'
       ),
+      'react-native-svg': path.resolve(
+        __dirname,
+        'src/__tests__/mocks/react-native-svg.ts'
+      ),
     },
   },
 });
